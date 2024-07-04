@@ -35,6 +35,7 @@ class S3Server:
         self._app.router.add_put("/{bucket_name}", wrap_method(self._create_bucket))
         self._app.router.add_get("/{bucket_name}", wrap_method(self._list_bucket))
         self._app.router.add_get("/{bucket_name}/{path:object_name}", wrap_method(self._read_object))
+        #self._app.router.add_head("/{bucket_name}/{path:object_name}", wrap_method(self._read_object_size))
         self._app.router.add_put("/{bucket_name}/{path:object_name}", wrap_method(self._write_object))
         self._app.router.add_post("/{bucket_name}/{path:object_name}", wrap_method(self._create_multipart))
 
@@ -110,11 +111,13 @@ class S3Server:
         if upload_info is not None:
             assert upload_info["key_id"] == key_id
 
+        content_length = int(request.headers.get_first("Content-Length", 0))
+
         if upload_info is None:
-            stream = await self._interface.write_object(key_id, bucket, object_name)
+            stream = await self._interface.write_object(key_id, bucket, object_name, content_length)
         else:
             object_ = S3Object(bucket, object_name, 0)
-            stream = await self._interface.write_object_multipart(object_, int(query["partNumber"]))
+            stream = await self._interface.write_object_multipart(object_, int(query["partNumber"]), content_length)
 
         stream = stream if isinstance(stream, ETagWriteStream) else ETagWriteStream(stream)
         async for chunk in request.stream():

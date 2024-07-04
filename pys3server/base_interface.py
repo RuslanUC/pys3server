@@ -86,13 +86,14 @@ class BaseInterface(ABC):
         """
 
     @abstractmethod
-    async def write_object(self, key_id: str, bucket: Bucket, object_name: str) -> BaseWriteStream:
+    async def write_object(self, key_id: str, bucket: Bucket, object_name: str, size: int) -> BaseWriteStream:
         """
         Writes object content
 
         :param key_id: S3 access key id
         :param bucket: S3 bucket
         :param object_name: S3 object name
+        :param size: Object size in bytes
         :return: BaseWriteStream to which object's content will be written
         """
 
@@ -108,12 +109,13 @@ class BaseInterface(ABC):
         """
 
     @abstractmethod
-    async def write_object_multipart(self, object_: S3Object, part_id: int) -> BaseWriteStream:
+    async def write_object_multipart(self, object_: S3Object, part_id: int, size: int) -> BaseWriteStream:
         """
         Writes object's part content
 
         :param object_: S3 object
         :param part_id: Part number
+        :param size: Part size in bytes
         :return: BaseWriteStream to which object's part's content will be written
         """
 
