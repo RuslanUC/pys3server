@@ -25,6 +25,13 @@ class BaseWriteStream:
 
 
 class BaseInterface(ABC):
+    async def on_start(self) -> None:
+        """
+        Called when the application is started
+
+        :return: None
+        """
+
     @abstractmethod
     async def access_key(self, key_id: str | None, object_: S3Object | Bucket | None) -> str | None:
         """

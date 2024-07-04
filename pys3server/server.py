@@ -41,6 +41,8 @@ class S3Server:
         self._original_error_handler = self._app.handle_internal_server_error
         self._app.handle_internal_server_error = self._handle_internal_server_error
 
+        self._app.on_start(self._interface.on_start)
+
     @staticmethod
     def _xml(content: str | BaseXmlResponse, status_code: int = 200) -> Response:
         content = content.to_xml() if isinstance(content, BaseXmlResponse) else content
