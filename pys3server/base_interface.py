@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from pys3server import S3Object, Bucket
+from pys3server import S3Object, Bucket, Part
 
 
 class BaseReadStream:
@@ -28,7 +28,8 @@ class BaseInterface(ABC):
     @abstractmethod
     async def access_key(self, key_id: str | None, object_: S3Object | Bucket | None) -> str | None:
         """
-        Checks credentials are correct
+        Checks credentials are correct.
+        Also checks if the user with given key_id has access to the object/bucket.
 
         :param key_id: S3 access key id
         :param object_: S3 object/bucket (or None if operation doesn't need a s3 object (e.g. ListBuckets))
@@ -65,30 +66,35 @@ class BaseInterface(ABC):
         """
 
     @abstractmethod
-    async def read_object(self, object_: S3Object, content_range: tuple[int, int] | None = None) -> BaseReadStream:
+    async def read_object(
+            self, key_id: str, object_: S3Object, content_range: tuple[int, int] | None = None
+    ) -> BaseReadStream:
         """
         Reads object content
 
+        :param key_id: S3 access key id
         :param object_: S3 object
         :param content_range: Range of bytes to return
         :return: BaseReadStream from which file content will be read
         """
 
     @abstractmethod
-    async def write_object(self, bucket: Bucket, object_name: str) -> BaseWriteStream:
+    async def write_object(self, key_id: str, bucket: Bucket, object_name: str) -> BaseWriteStream:
         """
         Writes object content
 
+        :param key_id: S3 access key id
         :param bucket: S3 bucket
         :param object_name: S3 object name
         :return: BaseWriteStream to which object's content will be written
         """
 
     @abstractmethod
-    async def create_multipart_upload(self, bucket: Bucket, object_name: str) -> S3Object:
+    async def create_multipart_upload(self, key_id: str, bucket: Bucket, object_name: str) -> S3Object:
         """
         Creates multipart upload
 
+        :param key_id: S3 access key id
         :param bucket: S3 bucket
         :param object_name: S3 object name
         :return: Created s3 object
@@ -105,10 +111,11 @@ class BaseInterface(ABC):
         """
 
     @abstractmethod
-    async def finish_multipart_upload(self, object_: S3Object) -> None:
+    async def finish_multipart_upload(self, object_: S3Object, parts: list[Part]) -> None:
         """
         Finishes multipart upload
 
         :param object_: S3 object
+        :param parts: List of upload parts
         :return: None
         """

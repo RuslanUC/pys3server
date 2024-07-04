@@ -1,10 +1,16 @@
+from abc import abstractmethod, ABC
+
 from pys3server import Bucket, S3Object
-
-NS = "{http://s3.amazonaws.com/doc/2006-03-01/}"
-NS_URL = NS[1:-1]
+from pys3server.xml_utils import NS_URL
 
 
-class ListAllMyBucketsResult:
+class BaseXmlResponse(ABC):
+    @abstractmethod
+    def to_xml(self) -> str:
+        ...
+
+
+class ListAllMyBucketsResult(BaseXmlResponse):
     __slots__ = ("buckets", "key_id",)
 
     def __init__(self, buckets: list[Bucket], key_id: str):
@@ -23,7 +29,7 @@ class ListAllMyBucketsResult:
         )
 
 
-class ListBucketResult:
+class ListBucketResult(BaseXmlResponse):
     __slots__ = ("bucket", "objects",)
 
     def __init__(self, bucket: Bucket, objects: list[S3Object]):
@@ -43,7 +49,7 @@ class ListBucketResult:
         )
 
 
-class InitiateMultipartUploadResult:
+class InitiateMultipartUploadResult(BaseXmlResponse):
     __slots__ = ("object", "upload_id",)
 
     def __init__(self, object_: S3Object, upload_id: str):
@@ -61,7 +67,7 @@ class InitiateMultipartUploadResult:
         )
 
 
-class CompleteMultipartUploadResult:
+class CompleteMultipartUploadResult(BaseXmlResponse):
     __slots__ = ("object",)
 
     def __init__(self, object_: S3Object):

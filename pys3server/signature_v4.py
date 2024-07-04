@@ -5,6 +5,8 @@ from hashlib import sha256
 from typing import TypedDict
 from blacksheep import Request
 
+from pys3server import parse_query
+
 
 class AuthDict(TypedDict):
     Credential: bytes
@@ -15,6 +17,9 @@ class AuthDict(TypedDict):
 class SignatureV4:
     __slots__ = ("key_id", "signature", "datestamp", "region", "signed_headers", "amzdate", "request",)
 
+    _AUTH_QUERY_KEYS = {
+        b"X-Amz-Algorithm", b"X-Amz-Credential", b"X-Amz-Date", b"X-Amz-SignedHeaders", b"X-Amz-Signature"
+    }
     _AUTH_DICT_KEYS = {"Credential", "SignedHeaders", "Signature"}
 
     def __init__(
@@ -37,7 +42,7 @@ class SignatureV4:
             b"\n".join([name+b":"+self.request.headers.get_first(name) for name in self.signed_headers.split(b";")]),
             b"",
             self.signed_headers,
-            self.request.headers.get_first(b"x-amz-content-sha256"),
+            self.request.headers.get_first(b"x-amz-content-sha256") or b"UNSIGNED_PAYLOAD",
         ])
         to_sign = b"\n".join([
             b"AWS4-HMAC-SHA256",
@@ -60,23 +65,39 @@ class SignatureV4:
 
     @classmethod
     def parse(cls, request: Request) -> SignatureV4 | None:
+        query: dict[bytes, bytes] = parse_query(request, decode=False)
+
         auth_header = request.headers.get_first(b"authorization")
-        if not auth_header:
-            return
-        auth = auth_header.replace(b",", b"").split(b" ")
-        if auth[0] != b"AWS4-HMAC-SHA256":
-            return
-        auth = auth[1:]
-        auth_dict: AuthDict = {key.decode("utf8"): value for key, value in [kv.split(b"=", 1) for kv in auth]}
-        if cls._AUTH_DICT_KEYS.intersection(auth_dict.keys()) != cls._AUTH_DICT_KEYS:
-            return
+        if auth_header is not None:
+            auth = auth_header.replace(b",", b"").split(b" ")
+            if auth[0] != b"AWS4-HMAC-SHA256":
+                return
+            auth = auth[1:]
+            auth_dict: AuthDict = {key.decode("utf8"): value for key, value in [kv.split(b"=", 1) for kv in auth]}
+
+            if cls._AUTH_DICT_KEYS.intersection(auth_dict.keys()) != cls._AUTH_DICT_KEYS:
+                return
+
+            amzdate = request.headers.get_first(b"x-amz-date")
+        else:
+            if cls._AUTH_QUERY_KEYS.intersection(query.keys()) != cls._AUTH_QUERY_KEYS:
+                return
+            if query.get(b"X-Amz-Algorithm") != b"AWS4-HMAC-SHA256":
+                return
+
+            auth_dict: AuthDict = {
+                "Credential": query[b"X-Amz-Credential"],
+                "SignedHeaders": query[b"X-Amz-SignedHeaders"],
+                "Signature": query[b"X-Amz-Signature"],
+            }
+
+            amzdate = query[b"X-Amz-Date"]
 
         try:
             key_id, datestamp, region, *_ = auth_dict["Credential"].split(b"/")
         except ValueError:
             return
 
-        signed_headers = auth_dict["SignedHeaders"]
-        amzdate = request.headers.get_first(b"x-amz-date")
-
-        return SignatureV4(key_id, auth_dict["Signature"], datestamp, region, signed_headers, amzdate, request)
+        return SignatureV4(
+            key_id, auth_dict["Signature"], datestamp, region, auth_dict["SignedHeaders"], amzdate, request
+        )
