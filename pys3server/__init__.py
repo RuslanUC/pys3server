@@ -4,7 +4,8 @@ from .upload_part import Part
 from .base_interface import BaseInterface, BaseWriteStream, BaseReadStream
 from .responses import ListAllMyBucketsResult, ListBucketResult, InitiateMultipartUploadResult, \
     CompleteMultipartUploadResult, BaseXmlResponse
-from .errors import AccessDenied, BucketAlreadyExists, BucketAlreadyOwnedByYou, NoSuchKey, InvalidPart, InvalidPartOrder
+from .errors import AccessDenied, BucketAlreadyExists, BucketAlreadyOwnedByYou, NoSuchKey, InvalidPart, \
+    InvalidPartOrder, InvalidSignature, InvalidRequest, InvalidAccessKeyId, NoSuchUpload
 from .etag_stream import ETagWriteStream
 from .jwt_msgpack import JWTMpNoTs
 from .utils import parse_query, parse_range

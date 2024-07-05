@@ -52,7 +52,12 @@ class BaseInterface(ABC):
     async def access_key(self, key_id: str | None, object_: S3Object | Bucket | None) -> str | None:
         """
         Checks credentials are correct.
-        Also checks if the user with given key_id has access to the object/bucket.
+        Also checks if the user with given key_id has access to the object/bucket:
+         - If key id is valid and has access to object/bucket, return it's access key
+         - If key id is valid and don't have access to object/bucket, raise AccessDenied
+         - If key id is invalid, raise InvalidAccessKeyId
+         - If key id is None and object/bucket is public, return None
+         - If key id is None and object/bucket is private, raise AccessDenied
 
         :param key_id: S3 access key id
         :param object_: S3 object/bucket (or None if operation doesn't need a s3 object (e.g. ListBuckets))
@@ -142,5 +147,25 @@ class BaseInterface(ABC):
 
         :param object_: S3 object
         :param parts: List of upload parts
+        :return: None
+        """
+
+    @abstractmethod
+    async def delete_object(self, key_id: str, object_: S3Object) -> None:
+        """
+        Deletes object
+
+        :param key_id: S3 access key id
+        :param object_: S3 object to delete
+        :return: None
+        """
+
+    @abstractmethod
+    async def delete_bucket(self, key_id: str, bucket: Bucket) -> None:
+        """
+        Deletes bucket
+
+        :param key_id: S3 access key id
+        :param bucket: S3 bucket to delete
         :return: None
         """

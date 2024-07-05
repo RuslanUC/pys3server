@@ -112,3 +112,58 @@ class InvalidPartOrder(S3Error):
             resource=self._resource(bucket, object_),
             details=self._details(bucket, object_),
         )
+
+
+class BucketNotEmpty(S3Error):
+    def __init__(self, bucket: Bucket):
+        super().__init__(
+            status_code=409,
+            code="BucketNotEmpty",
+            message="The bucket that you tried to delete is not empty.",
+            resource=self._resource(bucket),
+            details=self._details(bucket),
+        )
+
+
+class InvalidAccessKeyId(S3Error):
+    def __init__(self, bucket: Bucket | None = None, object_: S3Object | None = None):
+        super().__init__(
+            status_code=403,
+            code="InvalidAccessKeyId",
+            message="The AWS access key ID that you provided does not exist in our records.",
+            resource=self._resource(bucket, object_),
+            details=self._details(bucket, object_),
+        )
+
+
+class InvalidRequest(S3Error):
+    def __init__(self, bucket: Bucket | None = None, object_: S3Object | None = None):
+        super().__init__(
+            status_code=400,
+            code="InvalidRequest",
+            message="Invalid Request.",
+            resource=self._resource(bucket, object_),
+            details=self._details(bucket, object_),
+        )
+
+
+class InvalidSignature(S3Error):
+    def __init__(self, bucket: Bucket | None = None, object_: S3Object | None = None):
+        super().__init__(
+            status_code=400,
+            code="InvalidRequest",
+            message="The request is using the wrong signature version. Use AWS4-HMAC-SHA256 (Signature Version 4).",
+            resource=self._resource(bucket, object_),
+            details=self._details(bucket, object_),
+        )
+
+
+class NoSuchUpload(S3Error):
+    def __init__(self, bucket: Bucket | None = None, object_: S3Object | None = None):
+        super().__init__(
+            status_code=404,
+            code="NoSuchUpload",
+            message="The specified multipart upload does not exist.",
+            resource=self._resource(bucket, object_),
+            details=self._details(bucket, object_),
+        )

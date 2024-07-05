@@ -4,12 +4,12 @@ from os import urandom
 from typing import Callable, Awaitable, cast, AsyncIterable
 from xml.etree import ElementTree
 
-from blacksheep import Application, Request, Response, StreamedContent, TextContent
+from blacksheep import Application, Request, Response, StreamedContent, TextContent, Content
 
 from pys3server import BaseInterface, ListAllMyBucketsResult, Bucket, S3Object, ListBucketResult, \
     InitiateMultipartUploadResult, CompleteMultipartUploadResult, SignatureV4, JWTMpNoTs, ETagWriteStream, Part, \
     InvalidPart, InvalidPartOrder, BaseXmlResponse, parse_query, parse_range
-from pys3server.errors import S3Error
+from pys3server.errors import S3Error, InvalidAccessKeyId, NoSuchUpload
 from pys3server.xml_utils import get_xml_attr
 
 
@@ -34,10 +34,12 @@ class S3Server:
         self._app.router.add_get("/", wrap_method(self._list_buckets))
         self._app.router.add_put("/{bucket_name}", wrap_method(self._create_bucket))
         self._app.router.add_get("/{bucket_name}", wrap_method(self._list_bucket))
+        self._app.router.add_delete("/{bucket_name}", wrap_method(self._delete_bucket))
         self._app.router.add_get("/{bucket_name}/{path:object_name}", wrap_method(self._read_object))
-        #self._app.router.add_head("/{bucket_name}/{path:object_name}", wrap_method(self._read_object_size))
+        self._app.router.add_head("/{bucket_name}/{path:object_name}", wrap_method(self._read_object_size))
         self._app.router.add_put("/{bucket_name}/{path:object_name}", wrap_method(self._write_object))
         self._app.router.add_post("/{bucket_name}/{path:object_name}", wrap_method(self._create_complete_multipart))
+        self._app.router.add_delete("/{bucket_name}/{path:object_name}", wrap_method(self._delete_object))
 
         self._original_error_handler = self._app.handle_internal_server_error
         self._app.handle_internal_server_error = self._handle_internal_server_error
@@ -62,7 +64,8 @@ class S3Server:
         state = SignatureV4.parse(request)
         key_id = state.key_id.decode("utf8") if state is not None else None
         access_key = await self._interface.access_key(key_id, bucket_or_object)
-        state.verify(access_key)
+        if access_key is not None and not state.verify(access_key):
+            raise InvalidAccessKeyId()
 
         return key_id
 
@@ -99,7 +102,7 @@ class S3Server:
         status = 200 if range_ is None or not await stream.supports_range() else 206
         size = await stream.total_size()
         headers = []
-        #if size is not None:
+        # if size is not None:
         #    headers.append((b"Content-Length", str(size).encode("utf8")))
         if range_ is not None and await stream.supports_range():
             size = size if size is not None else "*"
@@ -107,19 +110,36 @@ class S3Server:
 
         return Response(status, headers, StreamedContent(b"application/octet-stream", _provider))
 
+    async def _read_object_size(self, request: Request, bucket_name: str, object_name: str) -> Response:
+        object_ = S3Object(Bucket(bucket_name), object_name, 0)
+        key_id = await self._auth(request, object_)
+        stream = await self._interface.read_object(key_id, object_)
+
+        size = await stream.total_size()
+        headers = []
+        if size is not None:
+            headers.append((b"Content-Length", str(size).encode("utf8")))
+
+        return Response(200, headers, Content(b"application/octet-stream", b""))
+
     async def _write_object(self, request: Request, bucket_name: str, object_name: str) -> Response:
         upload_info = None
         query = parse_query(request)
-        if "uploadId" in query:
-            assert "partNumber" in query and query["partNumber"].isdigit()  # TODO: raise exception
-            upload_info = JWTMpNoTs.decode(query["uploadId"], self._jwt_key)
-            assert upload_info["bucket"] == bucket_name  # TODO: raise exception
-            assert upload_info["object"] == object_name  # TODO: raise exception
-
         bucket = Bucket(bucket_name)
+        if "uploadId" in query:
+            if "partNumber" not in query or not query["partNumber"].isdigit():
+                raise NoSuchUpload(bucket)
+            if (upload_info := JWTMpNoTs.decode(query["uploadId"], self._jwt_key)) is None:
+                raise NoSuchUpload(bucket)
+            if upload_info["bucket"] != bucket_name:
+                raise NoSuchUpload(bucket)
+            if upload_info["object"] != object_name:
+                raise NoSuchUpload(bucket)
+
         key_id = await self._auth(request, bucket)
         if upload_info is not None:
-            assert upload_info["key_id"] == key_id  # TODO: raise exception
+            if upload_info["key_id"] != key_id:
+                raise NoSuchUpload(bucket)
 
         content_length = int(request.headers.get_first("Content-Length", 0))
 
@@ -142,11 +162,12 @@ class S3Server:
 
     async def _create_complete_multipart(self, request: Request, bucket_name: str, object_name: str) -> Response:
         query = parse_query(request)
-        if "uploads" not in query and "uploadId" not in query:
-            assert False  # TODO: raise exception
-
         bucket = Bucket(bucket_name)
         object_ = S3Object(bucket, object_name, 0)
+
+        if "uploads" not in query and "uploadId" not in query:
+            raise NoSuchUpload(bucket, object_)
+
         key_id = await self._auth(request, bucket)
 
         if "uploads" in query:
@@ -155,10 +176,14 @@ class S3Server:
 
             return self._xml(InitiateMultipartUploadResult(obj, upload_id))
         elif "uploadId" in query:
-            upload_info = JWTMpNoTs.decode(query["uploadId"], self._jwt_key)
-            assert upload_info["bucket"] == bucket_name  # TODO: raise exception
-            assert upload_info["object"] == object_name  # TODO: raise exception
-            assert upload_info["key_id"] == key_id  # TODO: raise exception
+            if (upload_info := JWTMpNoTs.decode(query["uploadId"], self._jwt_key)) is None:
+                raise NoSuchUpload(bucket)
+            if upload_info["bucket"] != bucket_name:
+                raise NoSuchUpload(bucket)
+            if upload_info["object"] != object_name:
+                raise NoSuchUpload(bucket)
+            if upload_info["key_id"] != key_id:
+                raise NoSuchUpload(bucket)
 
             parts: list[Part] = []
             data = await request.read()
@@ -179,3 +204,17 @@ class S3Server:
 
             await self._interface.finish_multipart_upload(object_, parts)
             return self._xml(CompleteMultipartUploadResult(object_))
+
+    async def _delete_object(self, request: Request, bucket_name: str, object_name: str) -> Response:
+        object_ = S3Object(Bucket(bucket_name), object_name, 0)
+        key_id = await self._auth(request, object_)
+        await self._interface.delete_object(key_id, object_)
+
+        return Response(204)
+
+    async def _delete_bucket(self, request: Request, bucket_name: str) -> Response:
+        bucket = Bucket(bucket_name)
+        key_id = await self._auth(request, bucket)
+        await self._interface.delete_bucket(key_id, bucket)
+
+        return Response(204)

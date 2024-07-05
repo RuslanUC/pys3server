@@ -5,7 +5,7 @@ from hashlib import sha256
 from typing import TypedDict
 from blacksheep import Request
 
-from pys3server import parse_query
+from pys3server import parse_query, InvalidSignature, InvalidRequest
 
 
 class AuthDict(TypedDict):
@@ -71,7 +71,7 @@ class SignatureV4:
         if auth_header is not None:
             auth = auth_header.replace(b",", b"").split(b" ")
             if auth[0] != b"AWS4-HMAC-SHA256":
-                return
+                raise InvalidSignature()
             auth = auth[1:]
             auth_dict: AuthDict = {key.decode("utf8"): value for key, value in [kv.split(b"=", 1) for kv in auth]}
 
@@ -83,7 +83,7 @@ class SignatureV4:
             if cls._AUTH_QUERY_KEYS.intersection(query.keys()) != cls._AUTH_QUERY_KEYS:
                 return
             if query.get(b"X-Amz-Algorithm") != b"AWS4-HMAC-SHA256":
-                return
+                raise InvalidSignature()
 
             auth_dict: AuthDict = {
                 "Credential": query[b"X-Amz-Credential"],
@@ -96,7 +96,7 @@ class SignatureV4:
         try:
             key_id, datestamp, region, *_ = auth_dict["Credential"].split(b"/")
         except ValueError:
-            return
+            raise InvalidRequest()
 
         return SignatureV4(
             key_id, auth_dict["Signature"], datestamp, region, auth_dict["SignedHeaders"], amzdate, request

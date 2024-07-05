@@ -1,8 +1,10 @@
 import json
 from hashlib import md5
+from os import remove
 from os.path import getsize
 from pathlib import Path
 from typing import TypedDict
+from shutil import rmtree
 
 from pys3server import BaseInterface, S3Object, Bucket, BaseReadStream, BaseWriteStream, BucketAlreadyOwnedByYou, \
     BucketAlreadyExists, AccessDenied, NoSuchKey, Part, InvalidPart
@@ -198,3 +200,26 @@ class FileInterface(BaseInterface):
 
             stream = FileWriteStream(f, self._root_dir / object_.bucket.name / "metadata.json", object_.name, False)
             await stream.write(None)
+
+    async def delete_object(self, key_id: str, object_: S3Object) -> None:
+        meta = self._check_ownership_get_metadata(key_id, object_.bucket)
+        try:
+            meta["files"].remove(object_.name)
+        except ValueError:
+            return
+
+        remove(self._root_dir / object_.bucket.name / object_.name)
+        with open(self._root_dir / object_.bucket.name / "metadata.json", "w") as f:
+            json.dump(meta, f)
+
+    async def delete_bucket(self, key_id: str, bucket: Bucket) -> None:
+        self._check_ownership_get_metadata(key_id, bucket)
+
+        meta = self._get_or_create_root_metadata()
+        try:
+            meta["users"][key_id].remove(bucket.name)
+        except (ValueError, IndexError):
+            return
+
+        rmtree(self._root_dir / bucket.name, ignore_errors=True)
+        self._write_root_metadata(meta)
