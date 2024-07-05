@@ -7,6 +7,6 @@ from .responses import ListAllMyBucketsResult, ListBucketResult, InitiateMultipa
 from .errors import AccessDenied, BucketAlreadyExists, BucketAlreadyOwnedByYou, NoSuchKey, InvalidPart, InvalidPartOrder
 from .etag_stream import ETagWriteStream
 from .jwt_msgpack import JWTMpNoTs
-from .utils import parse_query
+from .utils import parse_query, parse_range
 from .signature_v4 import SignatureV4
 from .server import S3Server

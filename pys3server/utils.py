@@ -20,3 +20,18 @@ def parse_query(request: Request, decode: bool = True) -> dict[str, str] | dict[
         result[k] = v
 
     return result
+
+
+def parse_range(header: bytes | None) -> tuple[int, int] | None:
+    if header is None:
+        return
+
+    header = header.split(b",")[0].split(b"=")
+    if len(header) != 2 or header[0] != b"bytes":
+        return
+
+    start, end = header[1].split(b"-")
+    if not start.isdigit() or not end.isdigit():  # TODO: support ranges like "500-" or "-250"
+        return
+
+    return int(start), int(end)

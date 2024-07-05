@@ -8,7 +8,7 @@ from blacksheep import Application, Request, Response, StreamedContent, TextCont
 
 from pys3server import BaseInterface, ListAllMyBucketsResult, Bucket, S3Object, ListBucketResult, \
     InitiateMultipartUploadResult, CompleteMultipartUploadResult, SignatureV4, JWTMpNoTs, ETagWriteStream, Part, \
-    InvalidPart, InvalidPartOrder, BaseXmlResponse, parse_query
+    InvalidPart, InvalidPartOrder, BaseXmlResponse, parse_query, parse_range
 from pys3server.errors import S3Error
 from pys3server.xml_utils import get_xml_attr
 
@@ -89,13 +89,23 @@ class S3Server:
     async def _read_object(self, request: Request, bucket_name: str, object_name: str) -> Response:
         object_ = S3Object(Bucket(bucket_name), object_name, 0)
         key_id = await self._auth(request, object_)
-        stream = await self._interface.read_object(key_id, object_)
+        range_ = parse_range(request.headers.get_first("Range"))
+        stream = await self._interface.read_object(key_id, object_, range_)
 
         async def _provider():
             while (data := await stream.read()) is not None:
                 yield data
 
-        return Response(200, content=StreamedContent(b"application/octet-stream", _provider))
+        status = 200 if range_ is None or not await stream.supports_range() else 206
+        size = await stream.total_size()
+        headers = []
+        #if size is not None:
+        #    headers.append((b"Content-Length", str(size).encode("utf8")))
+        if range_ is not None and await stream.supports_range():
+            size = size if size is not None else "*"
+            headers.append((b"Content-Range", f"bytes {range_[0]}-{range_[1]}/{size}".encode("utf8")))
+
+        return Response(status, headers, StreamedContent(b"application/octet-stream", _provider))
 
     async def _write_object(self, request: Request, bucket_name: str, object_name: str) -> Response:
         upload_info = None
