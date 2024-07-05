@@ -92,7 +92,7 @@ class S3Server:
     async def _read_object(self, request: Request, bucket_name: str, object_name: str) -> Response:
         object_ = S3Object(Bucket(bucket_name), object_name, 0)
         key_id = await self._auth(request, object_)
-        range_ = parse_range(request.headers.get_first("Range"))
+        range_ = parse_range(request.headers.get_first(b"Range"))
         stream = await self._interface.read_object(key_id, object_, range_)
 
         async def _provider():
@@ -141,7 +141,7 @@ class S3Server:
             if upload_info["key_id"] != key_id:
                 raise NoSuchUpload(bucket)
 
-        content_length = int(request.headers.get_first("Content-Length", 0))
+        content_length = int(request.headers.get_first(b"Content-Length") or 0)
 
         if upload_info is None:
             stream = await self._interface.write_object(key_id, bucket, object_name, content_length)
