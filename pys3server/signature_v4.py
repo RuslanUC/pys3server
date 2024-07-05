@@ -52,7 +52,7 @@ class SignatureV4:
         ])
 
         access_key = access_key.encode("utf8")
-        key = self._sign(b"AWS"+access_key, self.datestamp)
+        key = self._sign(b"AWS4"+access_key, self.datestamp)
         key = self._sign(key, self.region)
         key = self._sign(key, b"s3")
         key = self._sign(key, b"aws4_request")
