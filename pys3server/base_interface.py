@@ -12,6 +12,22 @@ class BaseReadStream:
         :return: Bytes (content) or None if EOF is reached
         """
 
+    @abstractmethod
+    async def supports_range(self) -> bool:
+        """
+        Whether this stream supports reading parts of an object.
+
+        :return: True if the stream supports reading parts of an object, False otherwise
+        """
+
+    @abstractmethod
+    async def total_size(self) -> int | None:
+        """
+        Total size of a whole object (not just part that specified in "range" argument)
+
+        :return: Total size of an object
+        """
+
 
 class BaseWriteStream:
     @abstractmethod

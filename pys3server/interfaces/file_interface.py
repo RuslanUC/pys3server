@@ -18,16 +18,18 @@ class BucketMetadata(TypedDict):
 
 
 class FileReadStream(BaseReadStream):
-    __slots__ = ("_fp", "_content_range",)
+    __slots__ = ("_fp", "_content_range", "_total_size")
 
     BS = 32 * 1024
 
-    def __init__(self, fp: ..., content_range: tuple[int, int] | None):
+    def __init__(self, fp: ..., content_range: tuple[int, int] | None, total_size: int):
         self._fp = fp
         self._read_more = -1
         if content_range is not None:
             self._fp.seek(content_range[0])
             self._read_more = content_range[1] - content_range[0]
+
+        self._total_size = total_size
 
     async def read(self) -> bytes | None:
         data = self._fp.read(min(self._read_more if self._read_more != -1 else self.BS, self.BS))
@@ -38,6 +40,12 @@ class FileReadStream(BaseReadStream):
             self._fp.close()
 
         return data if data else None
+
+    async def supports_range(self) -> bool:
+        return True
+
+    async def total_size(self) -> int | None:
+        return self._total_size
 
 
 class FileWriteStream(BaseWriteStream):
@@ -156,7 +164,8 @@ class FileInterface(BaseInterface):
     ) -> FileReadStream:
         self._check_ownership_get_metadata(key_id, object_.bucket)
 
-        return FileReadStream(open(self._root_dir / object_.bucket.name / object_.name, "rb"), content_range)
+        object_path = self._root_dir / object_.bucket.name / object_.name
+        return FileReadStream(open(object_path, "rb"), content_range, getsize(object_path))
 
     async def write_object(self, key_id: str, bucket: Bucket, object_name: str, size: int) -> FileWriteStream:
         self._check_ownership_get_metadata(key_id, bucket)
