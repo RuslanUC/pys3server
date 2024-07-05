@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pys3server"
-version = "0.1.0b3"
+version = "0.1.0b4"
 description = "Simple and extendable s3 server."
 authors = ["RuslanUC <dev_ruslan_uc@protonmail.com>"]
 readme = "README.md"

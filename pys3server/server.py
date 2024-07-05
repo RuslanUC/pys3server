@@ -1,7 +1,7 @@
 from functools import wraps
 from io import BytesIO
 from os import urandom
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, cast, AsyncIterable
 from xml.etree import ElementTree
 
 from blacksheep import Application, Request, Response, StreamedContent, TextContent
@@ -37,7 +37,7 @@ class S3Server:
         self._app.router.add_get("/{bucket_name}/{path:object_name}", wrap_method(self._read_object))
         #self._app.router.add_head("/{bucket_name}/{path:object_name}", wrap_method(self._read_object_size))
         self._app.router.add_put("/{bucket_name}/{path:object_name}", wrap_method(self._write_object))
-        self._app.router.add_post("/{bucket_name}/{path:object_name}", wrap_method(self._create_multipart))
+        self._app.router.add_post("/{bucket_name}/{path:object_name}", wrap_method(self._create_complete_multipart))
 
         self._original_error_handler = self._app.handle_internal_server_error
         self._app.handle_internal_server_error = self._handle_internal_server_error
@@ -101,15 +101,15 @@ class S3Server:
         upload_info = None
         query = parse_query(request)
         if "uploadId" in query:
-            assert "partNumber" in query and query["partNumber"].isdigit()
+            assert "partNumber" in query and query["partNumber"].isdigit()  # TODO: raise exception
             upload_info = JWTMpNoTs.decode(query["uploadId"], self._jwt_key)
-            assert upload_info["bucket"] == bucket_name
-            assert upload_info["object"] == object_name
+            assert upload_info["bucket"] == bucket_name  # TODO: raise exception
+            assert upload_info["object"] == object_name  # TODO: raise exception
 
         bucket = Bucket(bucket_name)
         key_id = await self._auth(request, bucket)
         if upload_info is not None:
-            assert upload_info["key_id"] == key_id
+            assert upload_info["key_id"] == key_id  # TODO: raise exception
 
         content_length = int(request.headers.get_first("Content-Length", 0))
 
@@ -120,7 +120,7 @@ class S3Server:
             stream = await self._interface.write_object_multipart(object_, int(query["partNumber"]), content_length)
 
         stream = stream if isinstance(stream, ETagWriteStream) else ETagWriteStream(stream)
-        async for chunk in request.stream():
+        async for chunk in cast(AsyncIterable[bytes], request.stream()):
             if chunk:
                 await stream.write(chunk)
 
@@ -130,11 +130,10 @@ class S3Server:
 
         return resp
 
-    async def _create_multipart(self, request: Request, bucket_name: str, object_name: str) -> Response:
+    async def _create_complete_multipart(self, request: Request, bucket_name: str, object_name: str) -> Response:
         query = parse_query(request)
         if "uploads" not in query and "uploadId" not in query:
-            print(query)
-            assert False
+            assert False  # TODO: raise exception
 
         bucket = Bucket(bucket_name)
         object_ = S3Object(bucket, object_name, 0)
@@ -147,9 +146,9 @@ class S3Server:
             return self._xml(InitiateMultipartUploadResult(obj, upload_id))
         elif "uploadId" in query:
             upload_info = JWTMpNoTs.decode(query["uploadId"], self._jwt_key)
-            assert upload_info["bucket"] == bucket_name
-            assert upload_info["object"] == object_name
-            assert upload_info["key_id"] == key_id
+            assert upload_info["bucket"] == bucket_name  # TODO: raise exception
+            assert upload_info["object"] == object_name  # TODO: raise exception
+            assert upload_info["key_id"] == key_id  # TODO: raise exception
 
             parts: list[Part] = []
             data = await request.read()

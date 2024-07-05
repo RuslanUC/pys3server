@@ -158,7 +158,7 @@ class FileInterface(BaseInterface):
 
         return FileReadStream(open(self._root_dir / object_.bucket.name / object_.name, "rb"), content_range)
 
-    async def write_object(self, key_id: str, bucket: Bucket, object_name: str) -> FileWriteStream:
+    async def write_object(self, key_id: str, bucket: Bucket, object_name: str, size: int) -> FileWriteStream:
         self._check_ownership_get_metadata(key_id, bucket)
 
         object_path = self._root_dir / bucket.name / object_name
@@ -168,7 +168,7 @@ class FileInterface(BaseInterface):
     async def create_multipart_upload(self, key_id: str, bucket: Bucket, object_name: str) -> S3Object:
         return S3Object(bucket, object_name, 0)
 
-    async def write_object_multipart(self, object_: S3Object, part_id: int) -> FileWriteStream:
+    async def write_object_multipart(self, object_: S3Object, part_id: int, size: int) -> FileWriteStream:
         part_path = self._root_dir / object_.bucket.name / ".multipart" / f"{object_.name}.part{part_id}"
         part_path.parent.mkdir(parents=True, exist_ok=True)
         return FileWriteStream(open(part_path, "wb"))
